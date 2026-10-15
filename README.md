@@ -1,46 +1,67 @@
-# ImmunoVation modeling notes
+# Doyle cardiovascular model — interactive sliders
 
-Four small case studies that show how numerical methods behave on immunology-style models:
-when a simulation breaks, when a curve fit cannot be trusted, where a fast surrogate stops
-being reliable, and how to plan limited lab capacity.
+An independent Python reconstruction of the circulation and optimal heart-rate controller described by Li et al. (2014), with English parameter sliders. This is the original standalone model, before the pregnancy and pulsatile-heart extensions.
 
-**All models are illustrative.** Parameters were chosen to demonstrate the methods. They are not
-fitted to patient, client or published data.
+![Slider application](slider_preview.png)
 
-| Script | Question | Methods |
-|---|---|---|
-| `study1_stiff.py` | Can I trust my time step? (cytokine/Treg model with fast and slow time scales) | explicit and implicit Euler (Newton), stiff reference solver (Radau) |
-| `study2_doseresponse.py` | Why can more dose levels make a fit worse? | Lagrange polynomials, Chebyshev nodes, PCHIP |
-| `study3_surrogate.py` | Where does a neural-network stand-in for the simulation stop being reliable? | feed-forward network trained with L-BFGS-B, Latin hypercube sampling |
-| `study4_lab_planning.py` | Which assay mix maximizes samples per week, and where is the bottleneck? | primal simplex, shadow prices, integer check |
+## Run locally
 
-## Run
+Requires Python 3 and a desktop environment with a working Matplotlib GUI backend.
 
 ```bash
-pip install -r requirements.txt
-python study1_stiff.py
-python study2_doseresponse.py
-python study3_surrogate.py      # about 2 minutes: trains the network with four restarts
-python study4_lab_planning.py
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python doyle_slider.py
 ```
 
-Each script prints its key numbers and writes a JSON file to `data/` (created automatically).
-Random seeds are fixed. Small differences across platforms and library versions are possible.
+On Windows, activate with `.venv\Scripts\activate` instead. On Linux, your Python installation may also need its Tk GUI package.
 
-`study3_surrogate.py` imports the model from `study1_stiff.py`, so keep the files in one folder.
+Move a slider, then click **Recalculate**. **Reset** restores the defaults. Select either **0–50 W** or **100–150 W** to compare the two demonstration workloads. Grey dashed curves use the published reference parameters; teal curves use your settings. They overlap at the defaults. Each run starts at its own equilibrium.
 
-## Solver note
+Sliders cover vascular compliances, heart pumping factors, blood volume, pulmonary and systemic resistance parameters, oxygen content and demand, and the controller penalty weights. The ranges are exploratory settings, not established clinical bounds. Invalid settings retain the last valid curves and display a message.
 
-`study4_lab_planning.py` uses `simplex.py` (a tableau-based primal simplex method that also
-returns the final tableau for shadow prices) if it is present, and checks the result against SciPy.
-If `simplex.py` is missing, the script falls back to SciPy's `linprog` and gives the same answer.
+## Mathematics and provenance
 
-The solver, interpolation, network and simplex code are implementations of standard algorithms
-(Euler schemes, Lagrange interpolation, feed-forward networks, tableau simplex) applied to new
-biological examples.
+Source: Li N, et al. (2014). *Robust efficiency and actuator saturation explain healthy heart rate control and variability*. Proceedings of the National Academy of Sciences, 111, E3476–E3485. [doi:10.1073/pnas.1401883111](https://doi.org/10.1073/pnas.1401883111).
+
+[Supporting information](https://nali.seas.harvard.edu/file_url/104).
+
+The implementation reconstructs the nonlinear circulation, oxygen balance and feedback control in main-text equations 2, 4 and 5. Physiological values follow SI Table S2; heart parameters follow subject 2 in Table S3; controller weights follow subject 2 in Table S4.
+
+The state is systemic arterial pressure, systemic venous pressure, pulmonary arterial pressure and venous oxygen content. Pulmonary venous pressure follows conservation of total blood volume. The controller linearizes the nonlinear model at the reference equilibrium, solves the continuous algebraic Riccati equation and feeds back the state deviations through heart rate.
+
+The cost uses the sum of squared weighted errors: `Q = diag(qP², 0, 0, qO²)` and `R = qH²`. This is an explicit reconstruction choice: the supporting information's row-vector C and R notation differs from the main text's sum-of-squares expression.
+
+Internal units are minutes, litres, mmHg, beats/min and watts; oxygen content is litres O₂ per litre of blood. Plots show seconds and ml O₂ per litre of blood.
+
+## Interpretation and limits
+
+The grey reference curves are simulations, not measurements from participants. Reference heart rates of 60 and 120 bpm and the repeated 50 W workload steps are demonstration choices; this is not an exact reproduction of Figure 4.
+
+Heart rate is continuous. Total blood volume and arterial oxygen content are fixed during each run. There is no explicit beat-to-beat variability, respiration, neural baroreflex, renal regulation or pregnancy adaptation. Venous oxygen content is not pulse-oximeter saturation (SpO₂). The code rejects nonphysical trajectories rather than clipping heart rate; it does not implement explicit actuator saturation. This educational reconstruction is not a clinical prediction tool.
+
+## Other commands
+
+```bash
+# Save a headless preview
+python doyle_slider.py --preview
+
+# Generate fixed-rate / feedback comparisons, CSV files and parameter report
+MPLBACKEND=Agg python doyle_model.py
+```
+
+The numerical model checks equilibrium balances, local closed-loop stability, the Riccati residual and physical domains. These checks do not establish agreement with measured human data.
+
+## Repository contents
+
+- `doyle_model.py`: equations, equilibrium, controller and integration.
+- `doyle_slider.py`: English desktop slider application.
+- `requirements.txt`: Python dependencies.
+- `slider_preview.png`: application preview.
 
 ## License
 
-MIT, see `LICENSE`.
+This repository’s original code and documentation are released under the [MIT License](LICENSE). Copyright (c) 2026 Andrea Loewendorf.
 
-Andrea Loewendorf, PhD, ImmunoVation, LLC
+The cited paper and supporting information retain their respective rights; the MIT License does not relicense those publications. Please retain the scientific source attribution when reusing this reconstruction.
